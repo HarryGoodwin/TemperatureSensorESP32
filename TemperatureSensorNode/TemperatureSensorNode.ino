@@ -6,9 +6,11 @@
 #include <BLEServer.h>
 
 #define DHT11PIN 13
-#define SERVICE_UUID        "181A"
+#define SERVICE_UUID "181A"
 #define TEMPERATURE_CHARACTERISTIC_UUID "2A6E"
 #define HUMIDITY_CHARACTERISTIC_UUID "2A6F"
+
+#define TOLERANCE 3
 
 dht11 DHT11;
 LiquidCrystal lcd(32, 33, 25, 26, 27, 14);
@@ -107,6 +109,15 @@ String checkError(int status) {
    }
 }
 
+bool toleranceCheck(int newTemp, int newHumidity) {
+  // Tolerance can only be checked after at least one reading has succeeded.
+  if (lastSuccessfulRead > 0 ) {
+    return ((abs(temperature - newTemp) <= TOLERANCE) && (abs(humidity - newHumidity) <= TOLERANCE));
+  } else {
+    return true;
+  }
+}
+
 void loop() {
   // Only refreh every 10s.
   if ((millis() - lastMillis) < 10000) {
@@ -116,7 +127,13 @@ void loop() {
   int status = DHT11.read(DHT11PIN);
   String errorMessage = checkError(status);
 
-  if (errorMessage.length() == 0) {
+  // Get updated readings from DHT11.
+  int newTemperature = (int)DHT11.temperature;
+  int newHumidity = (int)DHT11.humidity;
+
+  if ((errorMessage.length() == 0) && toleranceCheck(newTemperature, newHumidity)) {
+    temperature = (int)DHT11.temperature;
+    humidity = (int)DHT11.humidity;
     lastSuccessfulRead = millis();
   } 
 
@@ -130,9 +147,6 @@ void loop() {
     return;
   }
   
-  // Update local values from DHT11.
-  temperature = (int)DHT11.temperature;
-  humidity = (int)DHT11.humidity;
 
   testHighLowValues();
   updateLCD();

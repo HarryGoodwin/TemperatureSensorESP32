@@ -14,6 +14,8 @@ dht11 DHT11;
 LiquidCrystal lcd(32, 33, 25, 26, 27, 14);
 int humidity, temperature, lowTemp, highTemp, lowHumidity, highHumidity;
 
+unsigned long lastMillis, lastSuccessfulRead;
+
 int failCount, successCount;
 
 BLECharacteristic *tempCharacteristic;
@@ -41,6 +43,7 @@ void setupBT() {
 }
 
 void setup() {
+  lastMillis = millis();
   setupLCD();
   setupBT();
   lowTemp = INT_MAX;
@@ -51,6 +54,7 @@ void setup() {
 
   failCount = 0;
   successCount = 0;
+  lastSuccessfulRead = 0;
 }
 
 void updateBluetooth() {
@@ -86,19 +90,6 @@ void updateLCD() {
   lcd.print(lowHighHumidityStr);
 }
 
-void updateTempLCD() {
-  lcd.setCursor(0, 0);
-  String sStr =  "Success: " + String(successCount);
-  lcd.print(sStr);
-
-  lcd.setCursor(0, 1);
-  String fStr =  "Fail: " + String(failCount);
-  lcd.print(fStr);
-  
-  lcd.setCursor(0, 2);
-  lcd.print("Boot time: " + String(millis()));
-}
-
 String checkError(int status) {
    String error = "";
    switch (status) {
@@ -117,27 +108,36 @@ String checkError(int status) {
 }
 
 void loop() {
-  delay(30000);
-  int status = DHT11.read(DHT11PIN);
-
-  String errorMessage = checkError(status);
-
-  // Early return from loop if error.
-  if (errorMessage.length() > 0) {
-    // lcd.clear();
-    // lcd.setCursor(0, 0);
-    // lcd.print(errorMessage);
-
-    updateTempLCD();
+  // Only refreh every 10s.
+  if ((millis() - lastMillis) < 10000) {
     return;
   }
 
+  int status = DHT11.read(DHT11PIN);
+  String errorMessage = checkError(status);
+
+  if (errorMessage.length() == 0) {
+    lastSuccessfulRead = millis();
+  } 
+
+  // If a successful read has not happened in over 10 minutes go into error mode.
+  // This will not recover and will need manual intervention.
+  // TODO: Add a bluetooth error to send maybe?
+  if ((millis() - lastSuccessfulRead) > 600000) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Error: " + errorMessage);
+    return;
+  }
+  
   // Update local values from DHT11.
   temperature = (int)DHT11.temperature;
   humidity = (int)DHT11.humidity;
 
   testHighLowValues();
-  updateTempLCD();
+  updateLCD();
   updateBluetooth();
+  
+  lastMillis = millis();
 }
 
